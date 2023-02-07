@@ -29,10 +29,10 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         lm_logits = self.lm_head(hidden_states)
         outputs = (lm_logits,) + transformer_outputs[1:]
         if labels is not None:
-            # 计算loss时，title_id不可以为None，因为需要title_id找到title的部分
+            # 计算loss时,title_id不可以为None,因为需要title_id找到title的部分
             if title_id is None or token_type_ids is None:
                 raise Exception("当labels不为None时,title_id和token_type_ids均不可以为None!")
-            # 获取mask值，如果token_type_ids中等于title_id的部分需要计算loss，标记为1；否则为0。
+            # 获取mask值,如果token_type_ids中等于title_id的部分需要计算loss,标记为1;否则为0.
             # size:[batch_size, sequence_length]
             mask = (token_type_ids == title_id).long()
             labels = labels * mask

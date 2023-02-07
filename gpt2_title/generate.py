@@ -5,7 +5,8 @@ import os
 import torch
 import torch.nn.functional as F
 from transformers import BertTokenizer
-
+import pandas as pd
+import json
 from model import GPT2LMHeadModel
 
 
@@ -23,14 +24,14 @@ def set_args():
     return parser.parse_args()
 
 
-def top_k_top_p_filtering(logits: torch.Tensor, top_k: int, top_p: float,
-                          filter_value: float = -float("Inf")) -> torch.Tensor:
-    """top_k或top_p解码策略:仅保留top_k个或累积概率到达top_p的标记,其他标记设为filter_value,后续在选取标记的过程中会取不到值设为无穷小.
+def top_k_top_p_filtering(logits: torch.Tensor, top_k: int, top_p: float, filter_value: float = -float("Inf")):
+    """
+    top_k或top_p解码策略:仅保留top_k个或累积概率到达top_p的标记,其他标记设为filter_value,后续在选取标记的过程中会取不到值设为无穷小.
     :param logits: 模型的预测结果,即预测成为词典中每个词的概率.
     :param top_k: 只保留概率最高的top_k个标记.
     :param top_p: 只保留概率累积达到top_p的标记.
     :param filter_value: 过滤标记值.
-    :return:
+    :return
     """
     # logits的维度必须为2,即size:[batch_size, vocab_size]
     assert logits.dim() == 2
@@ -46,16 +47,16 @@ def top_k_top_p_filtering(logits: torch.Tensor, top_k: int, top_p: float,
     if top_p > 0.0:
         # 对logits进行递减排序
         sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
-        # 对排序后的结果使用softmax归一化，再获取累积概率序列
+        # 对排序后的结果使用softmax归一化,再获取累积概率序列
         # 例如：原始序列[0.1, 0.2, 0.3, 0.4]，则变为：[0.1, 0.3, 0.6, 1.0]
         cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
         # 删除累积概率高于top_p的标记
         sorted_indices_to_remove = cumulative_probs > top_p
-        # 将索引向右移动，使第一个标记也保持在top_p之上
+        # 将索引向右移动,使第一个标记也保持在top_p之上
         sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
         sorted_indices_to_remove[..., 0] = 0
         for index, logit in enumerate(logits):
-            # 由于有batch_size个预测结果，因此对其遍历，选取每个预测结果的累积概率达到top_p的标记
+            # 由于有batch_size个预测结果,因此对其遍历,选取每个预测结果的累积概率达到top_p的标记
             indices_to_remove = sorted_indices[index][sorted_indices_to_remove[index]]
             logit[indices_to_remove] = filter_value
     return logits
@@ -81,7 +82,7 @@ def predict_one_sample(model: GPT2LMHeadModel, tokenizer: BertTokenizer,
     content_tokens = ["[CLS]"] + content_tokens + ["[SEP]"]
     input_ids = tokenizer.convert_tokens_to_ids(content_tokens)
 
-    # 将input_ids和token_type_ids进行扩充，扩充到需要预测标题的个数，即batch_size
+    # 将input_ids和token_type_ids进行扩充,扩充到需要预测标题的个数,即batch_size.
     input_ids = [copy.deepcopy(input_ids) for _ in range(args.batch_size)]
     token_type_ids = [[content_id] * len(content_tokens) for _ in range(args.batch_size)]
     input_tensors = torch.tensor(input_ids).long().to(device)
@@ -157,6 +158,34 @@ def main():
         titles = predict_one_sample(model, tokenizer, device, args, content)
         for i, title in enumerate(titles):
             print("生成的第{}个标题为：{}".format(i + 1, title))
+
+
+def run():
+    args = set_args()
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICE"] = args.device
+    device = torch.device("cuda" if torch.cuda.is_available() and int(args.device) >= 0 else "cpu")
+
+    tokenizer = BertTokenizer.from_pretrained(args.vocab_path, do_lower_case=True)
+    model = GPT2LMHeadModel.from_pretrained(args.model_path)
+    model.to(device)
+    model.eval()
+    valid_data_path = "../valid_data.json"
+    with open(valid_data_path, mode="r", encoding="utf-8") as f:
+        content = json.load(f)
+    answer = []
+    cnt = 0
+    for line in content:
+        labels = predict_one_sample(model, tokenizer, device, args, line["content"])
+        answer.append({"content": line["content"], "predict_label": labels, "original_label": line["title"]})
+        cnt += 1
+        if cnt % 10 == 0:
+            print(f"已经预测{cnt}个试题的标签")
+        if cnt == 100:
+            break
+    output_dir = "predicted_label.xlsx"
+    df = pd.DataFrame(answer)
+    df.to_excel(output_dir)
 
 
 if __name__ == '__main__':

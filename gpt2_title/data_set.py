@@ -56,7 +56,7 @@ class GPT2NewsTitleDataSet(Dataset):
 
     def convert_feature(self, sample: Dict[str, str]) -> Tuple[List[int], List[int]]:
         """数据处理.
-        :param sample: 包含正文和标题，格式为{"content": content, "title": title}
+        :param sample: 包含正文和标题,格式为{"content": content, "title": title}
         :return:
         """
         input_ids = []
@@ -65,10 +65,10 @@ class GPT2NewsTitleDataSet(Dataset):
         content_tokens = self.tokenizer.tokenize(sample["content"])
         title_tokens = self.tokenizer.tokenize(sample["title"].replace(" ", "[Space]"))
 
-        # 判断如果标题过长，进行截断
+        # 判断如果标题过长,进行截断
         if len(title_tokens) > self.title_max_len:
             title_tokens = title_tokens[:self.title_max_len]
-        # 判断如果正文过长，进行截断
+        # 判断如果正文过长,进行截断
         if len(content_tokens) > self.max_len - len(title_tokens) - 3:
             content_tokens = content_tokens[:self.max_len - len(title_tokens) - 3]
 
@@ -77,7 +77,7 @@ class GPT2NewsTitleDataSet(Dataset):
 
         input_ids.extend(self.tokenizer.convert_tokens_to_ids(content_tokens))
         token_type_ids.extend([self.content_id] * len(content_tokens))
-
+        # TODO: 对于[SEP]这个标识符使用的是content_id.
         input_ids.append(self.tokenizer.sep_token_id)
         token_type_ids.append(self.content_id)
 
@@ -100,7 +100,7 @@ class GPT2NewsTitleDataSet(Dataset):
 
 
 def collate_func(batch_data: List[Dict[str, str]]) -> Dict[Optional[str], Optional[torch.Tensor]]:
-    """DataLoader所需的collate_fun函数，将数据处理成tensor形式.
+    """DataLoader所需的collate_fun函数,将数据处理成tensor形式.
     :param batch_data:
     :return:
     """
@@ -113,5 +113,7 @@ def collate_func(batch_data: List[Dict[str, str]]) -> Dict[Optional[str], Option
         token_type_ids_temp = instance["token_type_ids"]
         input_ids_list.append(torch.tensor(input_ids_temp, dtype=torch.long))
         token_type_ids_list.append(torch.tensor(token_type_ids_temp, dtype=torch.long))
-    return {"input_ids": pad_sequence(input_ids_list, batch_first=True, padding_value=0),
-            "token_type_ids": pad_sequence(token_type_ids_list, batch_first=True, padding_value=0)}
+    return {
+        "input_ids": pad_sequence(input_ids_list, batch_first=True, padding_value=0),
+        "token_type_ids": pad_sequence(token_type_ids_list, batch_first=True, padding_value=0)
+    }

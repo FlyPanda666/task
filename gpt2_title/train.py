@@ -178,10 +178,8 @@ def set_args():
 
 def main():
     args = set_args()
-    # 设置显卡信息
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICE"] = args.device
-    # 获取device信息,用于模型训练.
     device = torch.device("cuda" if torch.cuda.is_available() and int(args.device) >= 0 else "cpu")
     if args.seed:
         torch.manual_seed(args.seed)
@@ -192,7 +190,7 @@ def main():
     if args.pretrained_model_path:
         model = GPT2LMHeadModel.from_pretrained(args.pretrained_model_path)
     else:
-        # 如果没有指定的预训练模型，则初始化模型
+        # 如果没有指定的预训练模型,则初始化模型
         model = GPT2LMHeadModel(config=model_config)
     # 实例化tokenizer
     tokenizer = BertTokenizer.from_pretrained(args.vocab_path, do_lower_case=True)
