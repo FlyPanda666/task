@@ -16,7 +16,7 @@ class TaggerConfig:
 
 class SAN(nn.Module):
     def __init__(self, d_model, nhead, dropout=0.1):
-        super(SAN, self).__init__()
+        super().__init__()
         self.d_model = d_model
         self.nhead = nhead
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
@@ -25,7 +25,6 @@ class SAN(nn.Module):
 
     def forward(self, src, src_mask=None, src_key_padding_mask=None):
         """
-
         :param src:
         :param src_mask:
         :param src_key_padding_mask:
@@ -42,12 +41,11 @@ class GRU(nn.Module):
     # customized GRU with layer normalization
     def __init__(self, input_size, hidden_size, bidirectional=True):
         """
-
         :param input_size:
         :param hidden_size:
         :param bidirectional:
         """
-        super(GRU, self).__init__()
+        super().__init__()
         self.input_size = input_size
         if bidirectional:
             self.hidden_size = hidden_size // 2
@@ -65,14 +63,12 @@ class GRU(nn.Module):
 
     def forward(self, x):
         """
-
         :param x: input tensor, shape: (batch_size, seq_len, input_size)
         :return:
         """
 
         def recurrence(xt, htm1):
             """
-
             :param xt: current input
             :param htm1: previous hidden state
             :return:
@@ -116,12 +112,11 @@ class CRF(nn.Module):
     # https://github.com/allenai/allennlp/blob/master/allennlp/modules/conditional_random_field.py
     def __init__(self, num_tags, constraints=None, include_start_end_transitions=None):
         """
-
         :param num_tags:
         :param constraints:
         :param include_start_end_transitions:
         """
-        super(CRF, self).__init__()
+        super().__init__()
         self.num_tags = num_tags
         self.include_start_end_transitions = include_start_end_transitions
         self.transitions = nn.Parameter(torch.Tensor(self.num_tags, self.num_tags))
@@ -135,7 +130,6 @@ class CRF(nn.Module):
 
     def forward(self, inputs, tags, mask=None):
         """
-
         :param inputs: (bsz, seq_len, num_tags), logits calculated from a linear layer
         :param tags: (bsz, seq_len)
         :param mask: (bsz, seq_len), mask for the padding token
@@ -159,7 +153,6 @@ class CRF(nn.Module):
 
     def _input_likelihood(self, logits, mask):
         """
-
         :param logits: emission score calculated by a linear layer, shape: (batch_size, seq_len, num_tags)
         :param mask:
         :return:
@@ -246,7 +239,6 @@ class CRF(nn.Module):
 
     def viterbi_tags(self, logits, mask):
         """
-
         :param logits: (bsz, seq_len, num_tags), emission scores
         :param mask:
         :return:
@@ -308,12 +300,11 @@ class LSTM(nn.Module):
     # customized LSTM with layer normalization
     def __init__(self, input_size, hidden_size, bidirectional=True):
         """
-
         :param input_size:
         :param hidden_size:
         :param bidirectional:
         """
-        super(LSTM, self).__init__()
+        super().__init__()
         self.input_size = input_size
         if bidirectional:
             self.hidden_size = hidden_size // 2
@@ -328,7 +319,6 @@ class LSTM(nn.Module):
 
     def forward(self, x):
         """
-
         :param x: input, shape: (batch_size, seq_len, input_size)
         :return:
         """
@@ -384,7 +374,6 @@ class LSTM(nn.Module):
 class BertABSATagger(BertPreTrainedModel):
     def __init__(self, bert_config):
         """
-
         :param bert_config: configuration for bert model
         """
         super().__init__(bert_config)
@@ -393,7 +382,6 @@ class BertABSATagger(BertPreTrainedModel):
         self.tagger_config.absa_type = bert_config.absa_type.lower()
         if bert_config.tfm_mode == 'finetune':
             # initialized with pre-trained BERT and perform fine-tuning
-            # print("Fine-tuning the pre-trained BERT...")
             self.bert = BertModel(bert_config)
         else:
             raise Exception("Invalid transformer mode %s!!!" % bert_config.tfm_mode)
@@ -441,7 +429,6 @@ class BertABSATagger(BertPreTrainedModel):
         # the hidden states of the last Bert Layer, shape: (bsz, seq_len, hsz)
         tagger_input = outputs[0]
         tagger_input = self.bert_dropout(tagger_input)
-        # print("tagger_input.shape:", tagger_input.shape)
         if self.tagger is None or self.tagger_config.absa_type == 'crf':
             # regard classifier as the tagger
             logits = self.classifier(tagger_input)
@@ -485,7 +472,7 @@ class BertABSATagger(BertPreTrainedModel):
 class XLNetABSATagger(XLNetPreTrainedModel):
     # TODO
     def __init__(self, xlnet_config):
-        super(XLNetABSATagger, self).__init__(xlnet_config)
+        super().__init__(xlnet_config)
         self.num_labels = xlnet_config.num_labels
         self.xlnet = XLNetModel(xlnet_config)
         self.tagger_config = xlnet_config.absa_tagger_config

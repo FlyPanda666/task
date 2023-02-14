@@ -59,7 +59,7 @@ class XLNetLayerNorm(nn.Module):
     def __init__(self, d_model, eps=1e-12):
         """Construct a layer norm module in the TF style (epsilon inside the square root).
         """
-        super(XLNetLayerNorm, self).__init__()
+        super().__init__()
         self.weight = nn.Parameter(torch.ones(d_model))
         self.bias = nn.Parameter(torch.zeros(d_model))
         self.variance_epsilon = eps
@@ -104,9 +104,9 @@ class XLNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = 'transformer'
 
     def __init__(self, *inputs, **kwargs):
-        super(XLNetPreTrainedModel, self).__init__(*inputs, **kwargs)
+        super().__init__(*inputs, **kwargs)
 
-    def init_weights(self, module):
+    def _init_weights(self, module):
         """
         Initialize the weights.
         :param module:

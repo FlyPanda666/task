@@ -1,22 +1,7 @@
-# coding=utf-8
-# Copyright 2018 Google AI Language, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import torch
 import logging
 import os
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,10 +16,10 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
         if hasattr(model, 'lm_loss'):
             # We will load also the output bias
             tf_to_pt_map['model/lm_loss/bias'] = model.lm_loss.bias
-        if hasattr(model, 'sequence_summary') and 'model/sequnece_summary/summary/kernel' in tf_weights:
+        if hasattr(model, 'sequence_summary') and 'model/sequence_summary/summary/kernel' in tf_weights:
             # We will load also the sequence summary
-            tf_to_pt_map['model/sequnece_summary/summary/kernel'] = model.sequence_summary.summary.weight
-            tf_to_pt_map['model/sequnece_summary/summary/bias'] = model.sequence_summary.summary.bias
+            tf_to_pt_map['model/sequence_summary/summary/kernel'] = model.sequence_summary.summary.weight
+            tf_to_pt_map['model/sequence_summary/summary/bias'] = model.sequence_summary.summary.bias
         if hasattr(model, 'logits_proj') and config.finetuning_task is not None \
                 and 'model/regression_{}/logit/kernel'.format(config.finetuning_task) in tf_weights:
             tf_to_pt_map['model/regression_{}/logit/kernel'.format(config.finetuning_task)] = model.logits_proj.weight
@@ -45,7 +30,7 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
 
     # Embeddings and output
     tf_to_pt_map.update({'model/transformer/word_embedding/lookup_table': model.word_embedding.weight,
-                             'model/transformer/mask_emb/mask_emb': model.mask_emb})
+                         'model/transformer/mask_emb/mask_emb': model.mask_emb})
 
     # Transformer blocks
     for i, b in enumerate(model.layer):
@@ -100,7 +85,7 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
         import tensorflow as tf
     except ImportError:
         logger.error("Loading a TensorFlow models in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions.")
+                     "https://www.tensorflow.org/install/ for installation instructions.")
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
     logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
@@ -124,25 +109,25 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
         pointer = model
         for m_name in name:
             if re.fullmatch(r'[A-Za-z]+_\d+', m_name):
-                l = re.split(r'_(\d+)', m_name)
+                ll = re.split(r'_(\d+)', m_name)
             else:
-                l = [m_name]
-            if l[0] == 'kernel' or l[0] == 'gamma':
+                ll = [m_name]
+            if ll[0] == 'kernel' or ll[0] == 'gamma':
                 pointer = getattr(pointer, 'weight')
-            elif l[0] == 'output_bias' or l[0] == 'beta':
+            elif ll[0] == 'output_bias' or ll[0] == 'beta':
                 pointer = getattr(pointer, 'bias')
-            elif l[0] == 'output_weights':
+            elif ll[0] == 'output_weights':
                 pointer = getattr(pointer, 'weight')
-            elif l[0] == 'squad':
+            elif ll[0] == 'squad':
                 pointer = getattr(pointer, 'classifier')
             else:
                 try:
-                    pointer = getattr(pointer, l[0])
+                    pointer = getattr(pointer, ll[0])
                 except AttributeError:
                     logger.info("Skipping {}".format("/".join(name)))
                     continue
-            if len(l) >= 2:
-                num = int(l[1])
+            if len(ll) >= 2:
+                num = int(ll[1])
                 pointer = pointer[num]
         if m_name[-11:] == '_embeddings':
             pointer = getattr(pointer, 'weight')
@@ -192,7 +177,7 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
             array = np.transpose(array)
 
         if isinstance(pointer, list):
-            # Here we will split the TF weigths
+            # Here we will split the TF weights
             assert len(pointer) == array.shape[0]
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]

@@ -1,20 +1,3 @@
-# coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-""" BERT classification fine-tuning: utilities to work with GLUE tasks """
-
 from __future__ import absolute_import, division, print_function
 
 import csv
@@ -76,19 +59,19 @@ class SeqInputFeatures(object):
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir, tagging_schema):
         """Gets a collection of `InputExample`s for the train set."""
         raise NotImplementedError()
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir, tagging_schema):
         """Gets a collection of `InputExample`s for the dev set."""
         raise NotImplementedError()
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir, tagging_schema):
         """Gets a collection of `InputExample`s for the test set."""
         raise NotImplementedError()
 
-    def get_labels(self):
+    def get_labels(self, tagging_schema):
         """Gets the list of labels for this data set."""
         raise NotImplementedError()
 
@@ -130,7 +113,8 @@ class ABSAProcessor(DataProcessor):
         else:
             raise Exception("Invalid tagging schema %s..." % tagging_schema)
 
-    def _create_examples(self, data_dir, set_type, tagging_schema):
+    @staticmethod
+    def _create_examples(data_dir, set_type, tagging_schema):
         examples = []
         file = os.path.join(data_dir, "%s.txt" % set_type)
         class_count = np.zeros(3)
@@ -172,8 +156,7 @@ class ABSAProcessor(DataProcessor):
                         class_count[1] += 1
                     if s == 'NEU':
                         class_count[2] += 1
-                examples.append(InputExample(
-                    guid=guid, text_a=text_a, text_b=None, label=tags))
+                examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=tags))
                 sample_id += 1
         print("%s class count: %s" % (set_type, class_count))
         return examples
@@ -274,10 +257,8 @@ def convert_examples_to_seq_features(examples, label_list, tokenizer,
         else:
             # evaluate ids not change
             input_ids = input_ids + ([pad_token] * padding_length)
-            input_mask = input_mask + \
-                ([0 if mask_padding_with_zero else 1] * padding_length)
-            segment_ids = segment_ids + \
-                ([pad_token_segment_id] * padding_length)
+            input_mask = input_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
+            segment_ids = segment_ids + ([pad_token_segment_id] * padding_length)
             # pad sequence tag 'O'
             label_ids = label_ids + ([0] * padding_length)
         assert len(input_ids) == max_seq_length
@@ -287,23 +268,19 @@ def convert_examples_to_seq_features(examples, label_list, tokenizer,
 
         if ex_index < 5:
             logger.info("*** Example ***")
-            logger.info("guid: %s" % (example.guid))
+            logger.info("guid: %s" % example.guid)
             logger.info("tokens: %s" % " ".join([str(x) for x in tokens]))
-            logger.info("input_ids: %s" %
-                        " ".join([str(x) for x in input_ids]))
-            logger.info("input_mask: %s" %
-                        " ".join([str(x) for x in input_mask]))
-            logger.info("segment_ids: %s" %
-                        " ".join([str(x) for x in segment_ids]))
+            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+            logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+            logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
             logger.info("labels: %s " % ' '.join([str(x) for x in label_ids]))
             logger.info("evaluate label ids: %s" % evaluate_label_ids)
 
-        features.append(
-            SeqInputFeatures(input_ids=input_ids,
-                             input_mask=input_mask,
-                             segment_ids=segment_ids,
-                             label_ids=label_ids,
-                             evaluate_label_ids=evaluate_label_ids))
+        features.append(SeqInputFeatures(input_ids=input_ids,
+                                         input_mask=input_mask,
+                                         segment_ids=segment_ids,
+                                         label_ids=label_ids,
+                                         evaluate_label_ids=evaluate_label_ids))
     print("maximal sequence length is", max_seq_length)
     return features
 
@@ -385,16 +362,12 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
         padding_length = max_seq_length - len(input_ids)
         if pad_on_left:
             input_ids = ([pad_token] * padding_length) + input_ids
-            input_mask = ([0 if mask_padding_with_zero else 1]
-                          * padding_length) + input_mask
-            segment_ids = ([pad_token_segment_id] *
-                           padding_length) + segment_ids
+            input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
+            segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
         else:
             input_ids = input_ids + ([pad_token] * padding_length)
-            input_mask = input_mask + \
-                ([0 if mask_padding_with_zero else 1] * padding_length)
-            segment_ids = segment_ids + \
-                ([pad_token_segment_id] * padding_length)
+            input_mask = input_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
+            segment_ids = segment_ids + ([pad_token_segment_id] * padding_length)
 
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
@@ -409,22 +382,17 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
 
         if ex_index < 5:
             logger.info("*** Example ***")
-            logger.info("guid: %s" % (example.guid))
-            logger.info("tokens: %s" % " ".join(
-                [str(x) for x in tokens]))
-            logger.info("input_ids: %s" %
-                        " ".join([str(x) for x in input_ids]))
-            logger.info("input_mask: %s" %
-                        " ".join([str(x) for x in input_mask]))
-            logger.info("segment_ids: %s" %
-                        " ".join([str(x) for x in segment_ids]))
+            logger.info("guid: %s" % example.guid)
+            logger.info("tokens: %s" % " ".join([str(x) for x in tokens]))
+            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+            logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+            logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
             logger.info("label: %s (id = %d)" % (example.label, label_id))
 
-        features.append(
-            InputFeatures(input_ids=input_ids,
-                          input_mask=input_mask,
-                          segment_ids=segment_ids,
-                          label_id=label_id))
+        features.append(InputFeatures(input_ids=input_ids,
+                                      input_mask=input_mask,
+                                      segment_ids=segment_ids,
+                                      label_id=label_id))
     return features
 
 
@@ -461,15 +429,14 @@ def compute_metrics_absa(preds, labels, all_evaluate_label_ids, tagging_schema):
         absa_label_vocab = {'O': 0, 'EQ': 1, 'B-POS': 2, 'I-POS': 3,
                             'B-NEG': 4, 'I-NEG': 5, 'B-NEU': 6, 'I-NEU': 7}
     elif tagging_schema == 'OT':
-        absa_label_vocab = {'O': 0, 'EQ': 1,
-                            'T-POS': 2, 'T-NEG': 3, 'T-NEU': 4}
+        absa_label_vocab = {'O': 0, 'EQ': 1, 'T-POS': 2, 'T-NEG': 3, 'T-NEU': 4}
     else:
         raise Exception("Invalid tagging schema %s..." % tagging_schema)
     absa_id2tag = {}
     for k in absa_label_vocab:
         v = absa_label_vocab[k]
         absa_id2tag[v] = k
-    # number of true postive, gold standard, predicted targeted sentiment
+    # number of true positive, gold standard, predicted targeted sentiment
     n_tp_ts, n_gold_ts, n_pred_ts = np.zeros(3), np.zeros(3), np.zeros(3)
     # precision, recall and f1 for aspect-based sentiment analysis
     ts_precision, ts_recall, ts_f1 = np.zeros(3), np.zeros(3), np.zeros(3)
@@ -494,8 +461,7 @@ def compute_metrics_absa(preds, labels, all_evaluate_label_ids, tagging_schema):
         else:
             # current tagging schema is BIEOS, do nothing
             pass
-        g_ts_sequence, p_ts_sequence = tag2ts(
-            ts_tag_sequence=gold_tags), tag2ts(ts_tag_sequence=pred_tags)
+        g_ts_sequence, p_ts_sequence = tag2ts(ts_tag_sequence=gold_tags), tag2ts(ts_tag_sequence=pred_tags)
 
         hit_ts_count, gold_ts_count, pred_ts_count = match_ts(gold_ts_sequence=g_ts_sequence,
                                                               pred_ts_sequence=p_ts_sequence)
@@ -515,8 +481,7 @@ def compute_metrics_absa(preds, labels, all_evaluate_label_ids, tagging_schema):
         n_p_ts = n_pred_ts[i]
         ts_precision[i] = float(n_ts) / float(n_p_ts + SMALL_POSITIVE_CONST)
         ts_recall[i] = float(n_ts) / float(n_g_ts + SMALL_POSITIVE_CONST)
-        ts_f1[i] = 2 * ts_precision[i] * ts_recall[i] / \
-            (ts_precision[i] + ts_recall[i] + SMALL_POSITIVE_CONST)
+        ts_f1[i] = 2 * ts_precision[i] * ts_recall[i] / (ts_precision[i] + ts_recall[i] + SMALL_POSITIVE_CONST)
 
     macro_f1 = ts_f1.mean()
 
@@ -531,10 +496,8 @@ def compute_metrics_absa(preds, labels, all_evaluate_label_ids, tagging_schema):
     n_p_total = sum(n_pred_ts)
     micro_p = float(n_tp_total) / (n_p_total + SMALL_POSITIVE_CONST)
     micro_r = float(n_tp_total) / (n_g_total + SMALL_POSITIVE_CONST)
-    micro_f1 = 2 * micro_p * micro_r / \
-        (micro_p + micro_r + SMALL_POSITIVE_CONST)
-    scores = {'macro-f1': macro_f1, 'precision': micro_p,
-              "recall": micro_r, "micro-f1": micro_f1}
+    micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r + SMALL_POSITIVE_CONST)
+    scores = {'macro-f1': macro_f1, 'precision': micro_p, "recall": micro_r, "micro-f1": micro_f1}
     return scores
 
 

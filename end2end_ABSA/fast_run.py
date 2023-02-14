@@ -2,7 +2,7 @@ import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "3, 1, 2"
 
-#seed_numbers = [42, 593, 1774, 65336, 189990]
+# seed_numbers = [42, 593, 1774, 65336, 189990]
 seed_numbers = [42]
 model_type = 'bert'
 absa_type = 'linear'
@@ -25,7 +25,8 @@ for run_id, seed in enumerate(seed_numbers):
               "--max_steps 1500 --warmup_steps %s --do_train --do_eval --do_lower_case " \
               "--seed %s --tagging_schema BIEOS --overfit %s " \
               "--overwrite_output_dir --eval_all_checkpoints --MASTER_ADDR localhost --MASTER_PORT 28512" % (
-        model_type, absa_type, tfm_mode, fix_tfm, task_name, task_name, train_batch_size, warmup_steps, seed, overfit)
+                  model_type, absa_type, tfm_mode, fix_tfm, task_name, task_name, train_batch_size, warmup_steps, seed,
+                  overfit)
     output_dir = '%s-%s-%s-%s' % (model_type, absa_type, task_name, tfm_mode)
     if fix_tfm:
         output_dir = '%s-fix' % output_dir

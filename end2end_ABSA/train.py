@@ -7,7 +7,10 @@ import random
 import numpy as np
 import torch
 import torch.distributed as dist
-# from tensorboardX import SummaryWriter
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, TensorDataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
@@ -131,8 +134,8 @@ def init_args():
 
 def train(args, train_dataset, model, tokenizer):
     """ Train the model """
-    # if args.local_rank in [-1, 0]:
-    #     tb_writer = SummaryWriter()
+    if args.local_rank in [-1, 0]:
+        tb_writer = SummaryWriter()
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     # draw training samples from shuffled dataset
@@ -196,8 +199,7 @@ def train(args, train_dataset, model, tokenizer):
                 loss = loss / args.gradient_accumulation_steps
 
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(), args.max_grad_norm)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0:
@@ -212,10 +214,9 @@ def train(args, train_dataset, model, tokenizer):
                     if args.local_rank == -1 and args.evaluate_during_training:
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
-                            pass
-                    #         tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
-                    # tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
-                    # tb_writer.add_scalar('loss', (tr_loss - logging_loss) / args.logging_steps, global_step)
+                            tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
+                    tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
+                    tb_writer.add_scalar('loss', (tr_loss - logging_loss) / args.logging_steps, global_step)
                     logging_loss = tr_loss
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
@@ -237,7 +238,7 @@ def train(args, train_dataset, model, tokenizer):
             break
 
     if args.local_rank in [-1, 0]:
-        # tb_writer.close()
+        tb_writer.close()
         pass
 
     return global_step, tr_loss / global_step
@@ -256,13 +257,10 @@ def evaluate(args, model, tokenizer, mode, prefix=""):
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
 
-        args.eval_batch_size = args.per_gpu_eval_batch_size * \
-            max(1, args.n_gpu)
+        args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
         # Note that DistributedSampler samples randomly
-        eval_sampler = SequentialSampler(
-            eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
-        eval_dataloader = DataLoader(
-            eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+        eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
         # Eval!
         # logger.info("***** Running evaluation on %s.txt *****" % mode)
@@ -307,13 +305,11 @@ def evaluate(args, model, tokenizer, mode, prefix=""):
             crf_logits = torch.cat(crf_logits, dim=0)
             crf_mask = torch.cat(crf_mask, dim=0)
             preds = model.tagger.viterbi_tags(logits=crf_logits, mask=crf_mask)
-        result = compute_metrics_absa(
-            preds, out_label_ids, eval_evaluate_label_ids, args.tagging_schema)
+        result = compute_metrics_absa(preds, out_label_ids, eval_evaluate_label_ids, args.tagging_schema)
         result['eval_loss'] = eval_loss
         results.update(result)
 
-        output_eval_file = os.path.join(
-            eval_output_dir, "%s_results.txt" % mode)
+        output_eval_file = os.path.join(eval_output_dir, "%s_results.txt" % mode)
         with open(output_eval_file, "w") as writer:
             # logger.info("***** %s results *****" % mode)
             for key in sorted(result.keys()):
@@ -340,14 +336,11 @@ def load_and_cache_examples(args, task, tokenizer, mode='train'):
         # logger.info("Creating features from dataset file at %s", args.data_dir)
         label_list = processor.get_labels(args.tagging_schema)
         if mode == 'train':
-            examples = processor.get_train_examples(
-                args.data_dir, args.tagging_schema)
+            examples = processor.get_train_examples(args.data_dir, args.tagging_schema)
         elif mode == 'dev':
-            examples = processor.get_dev_examples(
-                args.data_dir, args.tagging_schema)
+            examples = processor.get_dev_examples(args.data_dir, args.tagging_schema)
         elif mode == 'test':
-            examples = processor.get_test_examples(
-                args.data_dir, args.tagging_schema)
+            examples = processor.get_test_examples(args.data_dir, args.tagging_schema)
         else:
             raise Exception("Invalid data mode %s..." % mode)
         features = convert_examples_to_seq_features(examples=examples, label_list=label_list, tokenizer=tokenizer,
@@ -382,16 +375,14 @@ def main():
 
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
         os.environ['MASTER_ADDR'] = args.MASTER_ADDR
         os.environ['MASTER_PORT'] = args.MASTER_PORT
-        torch.distributed.init_process_group(
-            backend='nccl', rank=args.local_rank, world_size=1)
+        torch.distributed.init_process_group(backend='nccl', rank=args.local_rank, world_size=1)
         args.n_gpu = 1
 
     args.device = device
@@ -489,8 +480,7 @@ def main():
         if int(global_step) > 1000 and dev_result['micro-f1'] > best_f1:
             best_f1 = dev_result['micro-f1']
             best_checkpoint = checkpoint
-        dev_result = dict((k + '_{}'.format(global_step), v)
-                          for k, v in dev_result.items())
+        dev_result = dict((k + '_{}'.format(global_step), v) for k, v in dev_result.items())
         results.update(dev_result)
 
         test_result = evaluate(args, model, tokenizer, mode='test', prefix=global_step)
@@ -525,7 +515,7 @@ def main():
                                                                                 test_f1_v, test_loss_k, test_loss_v,
                                                                                 dev_f1_k, dev_f1_v, dev_loss_k,
                                                                                 dev_loss_v))
-        validation_string = '\t\tdev-%s: %.5lf, dev-%s: %.5lf' % (dev_f1_k, dev_f1_v, dev_loss_k, dev_loss_v)
+        validation_string = '\t\t dev-%s: %.5lf, dev-%s: %.5lf' % (dev_f1_k, dev_f1_v, dev_loss_k, dev_loss_v)
         log_file.write(validation_string + '\n')
 
     n_times = args.max_steps // args.save_steps + 1

@@ -1,0 +1,1 @@
+python create_trigger.py --train ./SST-2/train.tsv --dev ./SST-2/dev.tsv --template '<s> {sentence} [T] [T] [T] [P] . </s>' --label-map '{"0": ["Ġworse", "Ġincompetence", "ĠWorse", "Ġblamed", "Ġsucked"], "1": ["ĠCris", "Ġmarvelous", "Ġphilanthrop", "Ġvisionary", "Ġwonderful"]}' --num-cand 100 --accumulation-steps 30 --bsz 24 --eval-size 48 --iters 180

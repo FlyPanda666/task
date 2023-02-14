@@ -127,3 +127,14 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/gpt2_title/data_dir/
+/gpt2_title/runs/
+/gpt2_pretrain/data_dir/
+/end2end_ABSA/cache
+/end2end_ABSA/data
+/end2end_ABSA/bert-tfm-laptop14-finetune
+/practice/
+/gpt2_title/output_dir/
+/gpt2_title/vocab/
+/gpt2_labels/topic_sorted.json
+/auto_prompt/SST-2/

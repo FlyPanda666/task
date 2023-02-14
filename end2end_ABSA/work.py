@@ -11,7 +11,6 @@ from absa_layer import BertABSATagger
 from glue_utils import convert_examples_to_seq_features, compute_metrics_absa, ABSAProcessor
 from seq_utils import ot2bieos_ts, bio2ot_ts, tag2ts
 
-# ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig)), ())
 ALL_MODELS = (
     'bert-base-uncased',
     'bert-large-uncased',

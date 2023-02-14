@@ -14,8 +14,7 @@ def layer():
         hidden_states = torch.rand(2, 3, 4)
         all_attentions = all_attentions + (self_attention, cross_attention)
 
-    x = tuple(v for v in [hidden_states, all_hidden_states,
-                          all_attentions] if v is not None)
+    x = tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
     print(type(x))
     print(len(x))
