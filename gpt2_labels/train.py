@@ -1,195 +1,206 @@
+import argparse
 import logging
 import os
-import pickle
-from datetime import datetime
+import random
 
+import numpy as np
 import torch
-import transformers
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
+from tqdm import tqdm
+from tqdm import trange
+from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import BertTokenizer
+from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
-from utils.function_module import EarlyStopping
-from utils.train_template import MyDataset, collate_fn, calculate_acc
+from dataset import GPT2LabelDataSet, collate_func
+from model import GPT2LMHeadModel
+
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+                    datefmt='%m/%d/%Y %H:%M:%S',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-class Train:
-    def __init__(self, args):
-        self.args = args
-        self.logger = self.create_logger()
-        self.train_dataset, self.validate_dataset = self.load_dataset()
+def train(model: GPT2LMHeadModel, device: torch.device, train_data: GPT2LabelDataSet,
+          test_data: GPT2LabelDataSet, args: argparse):
+    if args.gradient_accumulation_steps < 1:
+        raise ValueError("gradient_accumulation_steps参数无效,必须大于等于1.")
+    # 计算真实的训练batch_size大小.
+    train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
+    train_sampler = RandomSampler(train_data)
+    train_data_loader = DataLoader(
+        train_data, sampler=train_sampler, batch_size=train_batch_size, collate_fn=collate_func)
+    total_steps = int(len(train_data_loader) * args.num_train_epochs / args.gradient_accumulation_steps)
+    logger.info("总训练步数为:{}".format(total_steps))
+    model.to(device)
+    param_optimizer = list(model.named_parameters())
+    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    # L2正则化.
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in param_optimizer if not any(
+            nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        {'params': [p for n, p in param_optimizer if any(
+            nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+    # 设置优化器.
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    # 动态调整学习率.
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=int(args.warmup_proportion * total_steps), num_training_steps=total_steps)
+    # 清空cuda缓存.
+    torch.cuda.empty_cache()
+    model.train()
+    label_id = train_data.label_id
+    tr_loss, logging_loss, eval_loss = 0.0, 0.0, 0.0
+    global_step = 0
+    # 开始训练模型.
+    for _ in trange(0, int(args.num_train_epochs), desc="Epoch", disable=False):
+        iter_bar = tqdm(train_data_loader, desc="Iter (loss=X.XXX)", disable=False)
+        for step, batch in enumerate(iter_bar):
+            input_ids = batch["input_ids"].to(device)
+            token_type_ids = batch["token_type_ids"].to(device)
+            outputs = model.forward(
+                input_ids=input_ids, token_type_ids=token_type_ids, labels=input_ids, label_id=label_id)
+            loss = outputs[0]
+            tr_loss += loss.item()
+            # 将损失值放到Iter中,方便观察.
+            iter_bar.set_description("Iter (loss=%5.3f)" % loss.item())
+            # 判断是否进行梯度累积,如果进行,则将损失值除以累积步数.
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
+            # 损失进行回传.
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+            # 当训练步数整除累积步数时,进行参数优化.
+            if (step + 1) % args.gradient_accumulation_steps == 0:
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+                global_step += 1
+                # 如果步数整除logging_steps,则记录学习率和训练集损失值.
+                if args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                    """/Users/tal/anaconda3/lib/python3.6/site-packages/torch/optim/lr_scheduler.py:247: 
+                    UserWarning: To get the last learning rate computed by the scheduler, please use `get_last_lr()`.
+                    warnings.warn("To get the last learning rate computed by the scheduler, "
+                    """
+                    logging_loss = tr_loss
+                # 如果步数整除eval_steps,则进行模型测试,记录测试集的损失.
+                if args.eval_steps > 0 and global_step % args.eval_steps == 0:
+                    eval_loss = evaluate(model, device, test_data, args)
+                    model.train()
+        # 每个epoch进行完,保存模型.
+        output_dir = os.path.join(
+            args.output_dir, "checkpoint-steps:{}-eval_loss:{}".format(global_step, eval_loss))
+        model_to_save = model.module if hasattr(model, "module") else model
+        model_to_save.save_pretrained(output_dir)
+        # 清空cuda缓存.
+        torch.cuda.empty_cache()
 
-    def create_logger(self):
-        logger = logging.getLogger(__name__)
-        logger.setLevel(logging.INFO)
 
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-
-        file_handler = logging.FileHandler(filename=self.args.log_path)
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(logging.INFO)
-        logger.addHandler(file_handler)
-
-        console = logging.StreamHandler()
-        console.setLevel(logging.INFO)
-        console.setFormatter(formatter)
-        logger.addHandler(console)
-
-        return logger
-
-    def load_dataset(self):
-        self.logger.info("loading training dataset and validating dataset...")
-        with open(self.args.train_path, "rb") as f:
-            input_list = pickle.load(f)
-
-        input_list_train = input_list[self.args.val_num:]
-        input_list_val = input_list[:self.args.val_num]
-
-        train_dataset = MyDataset(input_list_train, self.args.max_len)
-        val_dataset = MyDataset(input_list_val, self.args.max_len)
-
-        return train_dataset, val_dataset
-
-    def train(self, model: torch.nn.Module):
-        train_dataloader = DataLoader(self.train_dataset, batch_size=self.args.batch_size, shuffle=True,
-                                      num_workers=self.args.num_workers, collate_fn=collate_fn, drop_last=True)
-        validate_dataloader = DataLoader(self.validate_dataset, batch_size=self.args.batch_size, shuffle=True,
-                                         num_workers=self.args.num_workers, collate_fn=collate_fn, drop_last=True)
-        early_stopping = EarlyStopping(self.args.patience, verbose=True, save_path=self.args.save_model_path)
-        t_total = len(train_dataloader) // self.args.gradient_accumulation_steps * self.args.epochs
-        optimizer = transformers.AdamW(model.parameters(), lr=self.args.lr, eps=self.args.eps)
-        scheduler = transformers.get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=t_total)
-
-        self.logger.info('starting training...')
-        train_losses, validate_losses = [], []
-        best_val_loss = 10000
-
-        for epoch in range(self.args.epochs):
-            train_loss = self._train_epoch(
-                model=model, train_dataloader=train_dataloader, optimizer=optimizer, scheduler=scheduler, epoch=epoch)
-            train_losses.append(train_loss)
-
-            validate_loss = self._validate_epoch(model=model, validate_dataloader=validate_dataloader, epoch=epoch)
-            validate_losses.append(validate_loss)
-
-            if validate_loss < best_val_loss:
-                best_val_loss = validate_loss
-                self.logger.info('saving current best model for epoch {}...'.format(epoch + 1))
-                model_path = os.path.join(self.args.save_model_path, 'min_ppl_model'.format(epoch + 1))
-                if not os.path.exists(model_path):
-                    os.mkdir(model_path)
-                model_to_save = model.module if hasattr(model, 'module') else model
-                model_to_save.save_pretrained(model_path)
-
-            if self.args.patience == 0:
-                continue
-            early_stopping(validate_loss, model)
-            if early_stopping.early_stop:
-                self.logger.info("early stopping...")
-                break
-        self.logger.info('training finished...')
-        self.logger.info("train_losses:{}".format(train_losses))
-        self.logger.info("validate_losses:{}".format(validate_losses))
-
-    def _train_epoch(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer, scheduler, epoch):
-        model.train()
-        epoch_start_time = datetime.now()
-        total_loss, epoch_correct_num, epoch_total_num = 0, 0, 0
-
-        for batch_idx, (input_ids, labels) in enumerate(train_dataloader):
-            try:
-                input_ids = input_ids.to(self.args.device)
-                labels = labels.to(self.args.device)
-                outputs = model.forward(input_ids, labels=labels)
-                logits = outputs.logits
-                loss = outputs.loss
-                loss = loss.mean()
-
-                batch_correct_num, batch_total_num = calculate_acc(logits, labels, ignore_index=self.args.ignore_index)
-                epoch_correct_num += batch_correct_num
-                epoch_total_num += batch_total_num
-                batch_acc = batch_correct_num / batch_total_num
-
-                total_loss += loss.item()
-                if self.args.gradient_accumulation_steps > 1:
-                    loss = loss / self.args.gradient_accumulation_steps
-
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
-
-                if (batch_idx + 1) % self.args.gradient_accumulation_steps == 0:
-                    optimizer.step()
-                    scheduler.step()
-                    optimizer.zero_grad()
-
-                if (batch_idx + 1) % self.args.log_step == 0:
-                    self.logger.info("batch {} of epoch {}, loss {}, batch_acc {}, lr {}".format(
-                            batch_idx + 1, epoch + 1, loss.item() * self.args.gradient_accumulation_steps, batch_acc,
-                            scheduler.get_lr()
-                        )
-                    )
-
-                del input_ids, outputs
-
-            except RuntimeError as exception:
-                if "out of memory" in str(exception):
-                    self.logger.info("WARNING: ran out of memory...")
-                    if hasattr(torch.cuda, 'empty_cache'):
-                        torch.cuda.empty_cache()
-                else:
-                    self.logger.info(str(exception))
-                    raise exception
-
-        epoch_mean_loss = total_loss / len(train_dataloader)
-        epoch_mean_acc = epoch_correct_num / epoch_total_num
-        self.logger.info("epoch {}: loss {}, predict_acc {}".format(epoch + 1, epoch_mean_loss, epoch_mean_acc))
-
-        self.logger.info('saving model for epoch {}'.format(epoch + 1))
-        model_path = os.path.join(self.args.save_model_path, 'epoch{}'.format(epoch + 1))
-        if not os.path.exists(model_path):
-            os.mkdir(model_path)
-        model_to_save = model.module if hasattr(model, 'module') else model
-        model_to_save.save_pretrained(model_path)
-        self.logger.info('epoch {} finished...'.format(epoch + 1))
-        epoch_finish_time = datetime.now()
-        self.logger.info('time for one epoch: {}'.format(epoch_finish_time - epoch_start_time))
-
-        return epoch_mean_loss
-
-    def _validate_epoch(self, model, validate_dataloader, epoch):
-        self.logger.info("start validating...")
+def evaluate(model: GPT2LMHeadModel, device: torch.device, test_data: GPT2LabelDataSet, args: argparse):
+    """验证模型效果.
+    :param model:
+    :param device:
+    :param test_data:
+    :param args:
+    :return:
+    """
+    test_sampler = SequentialSampler(test_data)
+    test_data_loader = DataLoader(test_data, sampler=test_sampler,
+                                  batch_size=args.test_batch_size, collate_fn=collate_func)
+    iter_bar = tqdm(test_data_loader, desc="iter", disable=False)
+    label_id = test_data.label_id
+    total_loss, total = 0.0, 0.0
+    for step, batch in enumerate(iter_bar):
+        # 模型设为eval
         model.eval()
-        device = self.args.device
-        epoch_start_time = datetime.now()
-        total_loss = 0
-        try:
-            with torch.no_grad():
-                for batch_idx, (input_ids, labels) in enumerate(validate_dataloader):
-                    input_ids = input_ids.to(device)
-                    labels = labels.to(device)
-                    outputs = model.forward(input_ids, labels=labels)
-                    loss = outputs.loss
-                    loss = loss.mean()
+        with torch.no_grad():
+            input_ids = batch["input_ids"].to(device)
+            token_type_ids = batch["token_type_ids"].to(device)
+            # 获取预测结果.
+            outputs = model.forward(
+                input_ids=input_ids, token_type_ids=token_type_ids, labels=input_ids, label_id=label_id)
+            loss = outputs[0]
+            loss = loss.item()
+            # 对loss进行累加.
+            total_loss += loss*len(batch["input_ids"])
+            total += len(batch["input_ids"])
+    # 计算最终测试集的loss结果.
+    test_loss = total_loss / total
+    return test_loss
 
-                    total_loss += loss.item()
-                    del input_ids, outputs
 
-                epoch_mean_loss = total_loss / len(validate_dataloader)
-                self.logger.info("validate epoch {}: loss {}".format(epoch + 1, epoch_mean_loss))
-                epoch_finish_time = datetime.now()
-                self.logger.info('time for validating one epoch: {}'.format(epoch_finish_time - epoch_start_time))
-                return epoch_mean_loss
-        except RuntimeError as exception:
-            if "out of memory" in str(exception):
-                self.logger.info("WARNING: run out of memory...")
-                if hasattr(torch.cuda, 'empty_cache'):
-                    torch.cuda.empty_cache()
-            else:
-                self.logger.info(str(exception))
-                raise exception
+def set_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--device', default='3',
+                        type=str, help='设置训练或测试时使用的显卡')
+    parser.add_argument(
+        '--config_path', default='./config/config.json', type=str, help='模型参数配置信息')
+    parser.add_argument('--vocab_path', default='./vocab/vocab.txt',
+                        type=str, help='词表,该词表中添加了试题知识点,并增加了一些新的标记')
+    parser.add_argument(
+        '--train_file_path', default='./data_dir/train_data_grade3.json', type=str, help='训练数据')
+    parser.add_argument(
+        '--test_file_path', default='./data_dir/test_data_grade3.json', type=str, help='测试数据')
+    parser.add_argument('--pretrained_model_path',
+                        default=None, type=str, help='预训练的GPT2模型的路径')
+    parser.add_argument('--data_dir', default='./data_dir',
+                        type=str, help='生成缓存数据的存放路径')
+    parser.add_argument('--num_train_epochs', default=10,
+                        type=int, help='模型训练的轮数')
+    parser.add_argument('--train_batch_size', default=16,
+                        type=int, help='训练时每个batch的大小')
+    parser.add_argument('--test_batch_size', default=8,
+                        type=int, help='测试时每个batch的大小')
+    parser.add_argument('--learning_rate', default=1e-4,
+                        type=float, help='模型训练时的学习率')
+    parser.add_argument('--warmup_proportion', default=0.1,
+                        type=float, help='warm up比例,即训练总步长的百分之多少,进行warm up')
+    parser.add_argument('--adam_epsilon', default=1e-8,
+                        type=float, help='Adam优化器的epsilon值')
+    parser.add_argument('--logging_steps', default=20,
+                        type=int, help='保存训练日志的步数')
+    parser.add_argument('--eval_steps', default=4000,
+                        type=int, help='训练时,多少步进行一次测试')
+    parser.add_argument('--gradient_accumulation_steps',
+                        default=4, type=int, help='梯度积累')
+    parser.add_argument('--max_grad_norm', default=1.0, type=float, help='')
+    parser.add_argument('--output_dir', default='./output_dir/',
+                        type=str, help='模型输出路径')
+    parser.add_argument('--seed', type=int, default=2020, help='随机种子')
+    parser.add_argument('--content_max_len', type=int, default=512,
+                        help='输入模型的最大长度,要比config中n_ctx小')
+    parser.add_argument('--label_max_len', type=int,
+                        default=200, help='生成标题的最大长度,要比max_len小')
+    return parser.parse_args()
 
-    def predict_one(self):
-        pass
 
-    def predict_all(self):
-        pass
+def main():
+    args = set_args()
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICE"] = args.device
+    device = torch.device("cuda" if torch.cuda.is_available() and int(args.device) >= 0 else "cpu")
+    if args.seed:
+        torch.manual_seed(args.seed)
+        random.seed(args.seed)
+        np.random.seed(args.seed)
 
+    model_config = GPT2Config.from_json_file(args.config_path)
+    if args.pretrained_model_path:
+        model = GPT2LMHeadModel.from_pretrained(args.pretrained_model_path)
+    else:
+        model = GPT2LMHeadModel(config=model_config)
+    tokenizer = BertTokenizer.from_pretrained(args.vocab_path, do_lower_case=True)
+    tokenizer.add_tokens("[Space]", special_tokens=True)
+    # 因为是在字典中直接修改的,对于字典的大小没有变化,因此没有使用model.resize_token_embeddings(len(tokenizer))。
+    if not os.path.exists(args.output_dir):
+        os.mkdir(args.output_dir)
+    train_data = GPT2LabelDataSet(
+        tokenizer, args.content_max_len, args.label_max_len, args.data_dir, "train", args.train_file_path)
+    test_data = GPT2LabelDataSet(
+        tokenizer, args.content_max_len, args.label_max_len, args.data_dir, "test", args.test_file_path)
+    train(model, device, train_data, test_data, args)
+
+
+if __name__ == '__main__':
+    main()
