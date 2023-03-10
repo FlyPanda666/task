@@ -92,13 +92,14 @@ class Encoder(nn.Module):
         """
         :param input_dim: source的字典大小.
         :param embedding_dim: 词向量的维度.
-        :param encoder_hidden_dim:
-        :param decoder_hidden_dim:
+        :param encoder_hidden_dim: encoder隐状态的维度.
+        :param decoder_hidden_dim: decoder隐状态的维度.
         :param dropout:
         """
         super().__init__()
         self.embedding = nn.Embedding(num_embeddings=input_dim, embedding_dim=embedding_dim)
         self.rnn = GRU(input_size=embedding_dim, hidden_size=encoder_hidden_dim, bidirectional=bidirectional)
+        # 将双向的输出拼接之后喂入fc.
         self.fc = nn.Linear(encoder_hidden_dim * 2, decoder_hidden_dim)
         self.dropout = nn.Dropout(dropout)
 
@@ -109,10 +110,11 @@ class Encoder(nn.Module):
         we can then use pack_padded_sequence on it with the lengths of the sentences.
         Note that the tensor containing the lengths of the sequences must be a CPU tensor as of the latest version of
         PyTorch, which we explicitly do so with to('cpu').
-        :param src: [src, batch_size]
-        :param src_len: [batch_size]
+        :param src: [src, batch_size] source序列.
+        :param src_len: [batch_size] source长度.
         :return:
         """
+        # 从前面的几个模型中也可以看出,在embedding之后都使用了dropout技术.
         embed = self.embedding(src)
         embed = self.dropout(embed)
         # need to explicitly put lengths on cpu!
@@ -227,7 +229,8 @@ class Seq2Seq(nn.Module):
         self.src_pad_idx = src_pad_idx
 
     def create_mask(self, src):
-        mask = (src != self.src_pad_idx).long().permute(1, 0)
+        mask = (src != self.src_pad_idx)
+        mask = mask.permute(1, 0)
         return mask
 
     def forward(self, src, src_len, target, teacher_forcing_ratio=0.5):
@@ -271,7 +274,7 @@ attn = Attention(ENC_HID_DIM, DEC_HID_DIM)
 enc = Encoder(INPUT_DIM, ENC_EMB_DIM, ENC_HID_DIM, DEC_HID_DIM, ENC_DROPOUT)
 dec = Decoder(OUTPUT_DIM, DEC_EMB_DIM, ENC_HID_DIM, DEC_HID_DIM, DEC_DROPOUT, attn)
 
-model = Seq2Seq(enc, dec, SRC_PAD_IDX, device).to(device)
+model = Seq2Seq(enc, dec, device, SRC_PAD_IDX).to(device)
 
 
 def init_weights(m):
