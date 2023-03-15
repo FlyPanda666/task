@@ -1,11 +1,10 @@
 import json
 import copy
 import six
+import logging
 
 
-class BertConfig:
-    """Configuration for `BertModel`."""
-
+class BertConfig(object):
     def __init__(self,
                  vocab_size=21128,
                  hidden_size=768,
@@ -19,19 +18,28 @@ class BertConfig:
                  max_position_embeddings=512,
                  type_vocab_size=2,
                  initializer_range=0.02):
-        """
-        :param vocab_size: Vocabulary size of `inputs_ids` in `BertModel`.
-        :param hidden_size: Size of the encoder layers and the pooler layer.
-        :param num_hidden_layers: Number of hidden layers in the Transformer encoder.
-        :param num_attention_heads: Number of attention heads for each attention layer in the Transformer encoder.
-        :param intermediate_size: The size of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        :param pad_token_id:
-        :param hidden_act: The non-linear activation function (function or string) in the encoder and pooler.
-        :param hidden_dropout_prob: The dropout probability for all fully connected layers.
-        :param attention_probs_dropout_prob: The dropout ratio for the attention probabilities.
-        :param max_position_embeddings: The maximum sequence length that this model might ever be used with.
-        :param type_vocab_size: The vocabulary size of the `token_type_ids` passed into `BertModel`.
-        :param initializer_range: The st_dev of the truncated_normal_initializer for initializing all weight matrices.
+        """Constructs BertConfig.
+        Args:
+          vocab_size: Vocabulary size of `inputs_ids` in `BertModel`.
+          hidden_size: Size of the encoder layers and the pooler layer.
+          num_hidden_layers: Number of hidden layers in the Transformer encoder.
+          num_attention_heads: Number of attention heads for each attention layer in
+            the Transformer encoder.
+          intermediate_size: The size of the "intermediate" (i.e., feed-forward)
+            layer in the Transformer encoder.
+          hidden_act: The non-linear activation function (function or string) in the
+            encoder and pooler.
+          hidden_dropout_prob: The dropout probability for all fully connected
+            layers in the embeddings, encoder, and pooler.
+          attention_probs_dropout_prob: The dropout ratio for the attention
+            probabilities.
+          max_position_embeddings: The maximum sequence length that this model might
+            ever be used with. Typically set this to something large just in case
+            (e.g., 512 or 1024 or 2048).
+          type_vocab_size: The vocabulary size of the `token_type_ids` passed into
+            `BertModel`.
+          initializer_range: The stddev of the truncated_normal_initializer for
+            initializing all weight matrices.
         """
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -56,9 +64,10 @@ class BertConfig:
 
     @classmethod
     def from_json_file(cls, json_file):
-        """Constructs a `BertConfig` from a json file of parameters."""
+        """从json配置文件读取配置信息"""
         with open(json_file, 'r') as reader:
             text = reader.read()
+        logging.info(f"成功导入BERT配置文件 {json_file}")
         return cls.from_dict(json.loads(text))
 
     def to_dict(self):
