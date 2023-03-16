@@ -1350,7 +1350,7 @@ def define_sagemaker_information():
 
 def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     """
-    Formats a user-agent string with basic info about a request.
+    Formats a user-agent string with trans info about a request.
     """
     ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if is_torch_available():

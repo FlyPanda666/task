@@ -395,26 +395,26 @@ class BertABSATagger(BertPreTrainedModel):
         self.tagger = None
         if self.tagger_config.absa_type == 'linear':
             # hidden size at the penultimate layer
-            penultimate_hidden_size = bert_config.hidden_size
+            penultimate_hidden_size = bert_config.hidden_dim
         else:
             self.tagger_dropout = nn.Dropout(self.tagger_config.hidden_dropout_prob)
             if self.tagger_config.absa_type == 'lstm':
-                self.tagger = LSTM(input_size=bert_config.hidden_size,
+                self.tagger = LSTM(input_size=bert_config.hidden_dim,
                                    hidden_size=self.tagger_config.hidden_size,
                                    bidirectional=self.tagger_config.bidirectional)
             elif self.tagger_config.absa_type == 'gru':
-                self.tagger = GRU(input_size=bert_config.hidden_size,
+                self.tagger = GRU(input_size=bert_config.hidden_dim,
                                   hidden_size=self.tagger_config.hidden_size,
                                   bidirectional=self.tagger_config.bidirectional)
             elif self.tagger_config.absa_type == 'tfm':
                 # transformer encoder layer
-                self.tagger = nn.TransformerEncoderLayer(d_model=bert_config.hidden_size,
+                self.tagger = nn.TransformerEncoderLayer(d_model=bert_config.hidden_dim,
                                                          nhead=12,
-                                                         dim_feedforward=4 * bert_config.hidden_size,
+                                                         dim_feedforward=4 * bert_config.hidden_dim,
                                                          dropout=0.1)
             elif self.tagger_config.absa_type == 'san':
                 # vanilla self attention networks
-                self.tagger = SAN(d_model=bert_config.hidden_size, nhead=12, dropout=0.1)
+                self.tagger = SAN(d_model=bert_config.hidden_dim, nhead=12, dropout=0.1)
             elif self.tagger_config.absa_type == 'crf':
                 self.tagger = CRF(num_tags=self.num_labels)
             else:
@@ -485,14 +485,14 @@ class XLNetABSATagger(XLNetPreTrainedModel):
             if self.tagger_config.tagger in ['RNN', 'LSTM', 'GRU']:
                 # 2-layer bi-directional rnn decoder
                 self.tagger = getattr(nn, self.tagger_config.tagger)(
-                    input_size=xlnet_config.d_model, hidden_size=self.tagger_config.hidden_size // 2,
+                    input_size=xlnet_config.d_model, hidden_size=self.tagger_config.hidden_dim // 2,
                     num_layers=self.tagger_config.n_rnn_layers, batch_first=True, bidirectional=True)
             elif self.tagger_config.tagger in ['CRF']:
                 # crf tagger
                 raise Exception("Unimplemented now!!")
             else:
                 raise Exception('Unimplemented tagger %s...' % self.tagger_config.tagger)
-            penultimate_hidden_size = self.tagger_config.hidden_size
+            penultimate_hidden_size = self.tagger_config.hidden_dim
         self.tagger_dropout = nn.Dropout(self.tagger_config.hidden_dropout_prob)
         self.classifier = nn.Linear(penultimate_hidden_size, xlnet_config.num_labels)
         self.apply(self.init_weights)

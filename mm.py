@@ -7,13 +7,13 @@ import torch.nn as nn
 class Attention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.query_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.key_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.value_proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.query_proj = nn.Linear(config.hidden_dim, config.hidden_dim)
+        self.key_proj = nn.Linear(config.hidden_dim, config.hidden_dim)
+        self.value_proj = nn.Linear(config.hidden_dim, config.hidden_dim)
 
-        assert config.hidden_size % config.num_heads == 0, "不能整除"
+        assert config.hidden_dim % config.num_heads == 0, "不能整除"
         self.num_heads = config.num_heads
-        self.head_dim = config.hidden_size // self.num_heads
+        self.head_dim = config.hidden_dim // self.num_heads
         self.dropout = nn.Dropout(config.dropout_rate)
         self.all_head_size = self.num_heads * self.head_dim
 

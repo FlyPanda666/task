@@ -4,12 +4,12 @@ from CasEE.layers import *
 class TypeCls(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.type_emb = nn.Embedding(config.type_num, config.hidden_size)
+        self.type_emb = nn.Embedding(config.type_num, config.hidden_dim)
         self.register_buffer('type_indices', torch.arange(0, config.type_num, 1).long())
         self.dropout = nn.Dropout(config.decoder_dropout)
 
         self.config = config
-        self.Predictor = AdaptiveAdditionPredictor(config.hidden_size, dropout_rate=config.decoder_dropout)
+        self.Predictor = AdaptiveAdditionPredictor(config.hidden_dim, dropout_rate=config.decoder_dropout)
 
     def forward(self, text_rep, mask):
         type_emb = self.type_emb(self.type_indices)
@@ -120,8 +120,8 @@ class CasEE(nn.Module):
         self.text_seq_len = config.seq_length
 
         self.type_cls = TypeCls(config)
-        self.trigger_rec = TriggerRec(config, config.hidden_size)
-        self.args_rec = ArgsRec(config, config.hidden_size, self.args_num, self.text_seq_len, pos_emb_size)
+        self.trigger_rec = TriggerRec(config, config.hidden_dim)
+        self.args_rec = ArgsRec(config, config.hidden_dim, self.args_num, self.text_seq_len, pos_emb_size)
         self.dropout = nn.Dropout(config.decoder_dropout)
 
         self.loss_0 = nn.BCELoss(reduction='none')

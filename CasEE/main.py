@@ -41,7 +41,7 @@ def main():
     config_class, model_class, tokenizer_class = MODEL_CLASSES[config.model_type]
     config_plm = config_class.from_pretrained(config.model_name_or_path,
                                               cache_dir=config.cache_dir if config.cache_dir else None)
-    config.hidden_size = config_plm.hidden_size
+    config.hidden_dim = config_plm.hidden_dim
     tokenizer = tokenizer_class.from_pretrained(config.model_name_or_path, do_lower_case=config.do_lower_case,
                                                 cache_dir=config.cache_dir if config.cache_dir else None)
     model_weight = model_class.from_pretrained(config.model_name_or_path,

@@ -10,7 +10,7 @@ class NerBert(BertPreTrainedModel):
         self.bert = BertModel(config)
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.label_num)
+        self.classifier = nn.Linear(config.hidden_dim, config.label_num)
         self.post_init()
 
     def forward(self, all_input_ids=None, all_attention_mask=None, all_token_type_ids=None, all_label_ids=None):

@@ -138,3 +138,6 @@ dmypy.json
 /gpt2_title/vocab/
 /gpt2_labels/topic_sorted.json
 /auto_prompt/SST-2/
+/gpt2_labels/data_dir
+/gpt2_labels/output_dir
+/encoder_decoder/.data

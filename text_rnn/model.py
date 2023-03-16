@@ -7,7 +7,7 @@ import torch.nn as nn
 class TextRNN(nn.Module, ABC):
     def __init__(self, args):
         super(TextRNN, self).__init__()
-        self.hidden_size = args.hidden_size
+        self.hidden_size = args.hidden_dim
         self.layer_num = args.layer_num
         self.bidirectional = args.bidirectional
         self.embedding = nn.Embedding(args.vocab_size, args.embedding_dim)

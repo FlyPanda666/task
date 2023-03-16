@@ -106,7 +106,7 @@ def load_vocab(vocab_file):
 
 
 def whitespace_tokenize(text):
-    """Runs basic whitespace cleaning and splitting on a piece of text."""
+    """Runs trans whitespace cleaning and splitting on a piece of text."""
     text = text.strip()
     if not text:
         return []
@@ -127,7 +127,7 @@ class BertTokenizer(PreTrainedTokenizer):
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to lowercase the input when tokenizing.
         do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to do basic tokenization before WordPiece.
+            Whether or not to do trans tokenization before WordPiece.
         never_split (:obj:`Iterable`, `optional`):
             Collection of tokens which will never be split during tokenization. Only has an effect when
             :obj:`do_basic_tokenize=True`
@@ -351,7 +351,7 @@ class BertTokenizer(PreTrainedTokenizer):
 
 class BasicTokenizer(object):
     """
-    Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
+    Constructs a BasicTokenizer that will run trans tokenization (punctuation splitting, lower casing, etc.).
 
     Args:
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
